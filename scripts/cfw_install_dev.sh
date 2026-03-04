@@ -12,9 +12,9 @@
 #   - `ipsw` tool installed (brew install blacktop/tap/ipsw)
 #   - `aea` tool available (macOS 12+)
 #   - Python: make setup_venv && source .venv/bin/activate
-#   - cfw_input/ or resources/cfw_input.tar.zst present
+#   - cfw_input/ or resources/cfw_dev_input.tar.zst present
 #
-# Usage: make cfw_install
+# Usage: make cfw_install_dev
 set -euo pipefail
 
 VM_DIR="${1:-.}"
@@ -26,7 +26,7 @@ VM_DIR="$(cd "$VM_DIR" && pwd)"
 
 # ── Configuration ───────────────────────────────────────────────
 CFW_INPUT="cfw_input"
-CFW_ARCHIVE="cfw_input.tar.zst"
+CFW_ARCHIVE="cfw_dev_input.tar.zst"
 TEMP_DIR="$VM_DIR/.cfw_temp"
 
 SSH_PORT=2222
@@ -216,6 +216,24 @@ sudo hdiutil attach -mountpoint "$MNT_APPOS" "$APPOS_DMG" -owners off
 # Mount device rootfs (tolerate already-mounted)
 echo "  Mounting device rootfs rw..."
 remote_mount /dev/disk1s1 /mnt1
+
+# Patch launchd jetsum guard
+echo ""
+echo "  Patching launchd (jetsam guard)..."
+
+if ! remote_file_exists "/mnt1/sbin/launchd.bak"; then
+  echo "  Creating backup..."
+  ssh_cmd "/bin/cp /mnt1/sbin/launchd /mnt1/sbin/launchd.bak"
+fi
+
+scp_from "/mnt1/sbin/launchd.bak" "$TEMP_DIR/launchd"
+
+python3 "$SCRIPT_DIR/patchers/cfw.py" patch-launchd-jetsam "$TEMP_DIR/launchd"
+ldid_sign "$TEMP_DIR/launchd"
+scp_to "$TEMP_DIR/launchd" "/mnt1/sbin/launchd"
+ssh_cmd "/bin/chmod 0755 /mnt1/sbin/launchd"
+
+echo "  [+] launchd patched"
 
 # Rename APFS update snapshot to orig-fs (idempotent)
 echo "  Checking APFS snapshots..."
