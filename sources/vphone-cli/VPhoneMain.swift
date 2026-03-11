@@ -45,6 +45,18 @@ struct VPhoneMain {
             case var command as SendRamdiskCLI:
                 try await command.run()
 
+            case var command as CFWCryptexPathsCLI:
+                try command.run()
+
+            case var command as CFWPatchSeputilCLI:
+                try command.run()
+
+            case var command as CFWInjectDaemonsCLI:
+                try await command.run()
+
+            case var command as CFWInjectDylibCLI:
+                try await command.run()
+
             default:
                 break
             }

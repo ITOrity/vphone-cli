@@ -18,6 +18,10 @@ struct VPhoneCLI: ParsableCommand {
             SendRamdiskCLI.self,
             BootHostPreflightCLI.self,
             StartAmfidontCLI.self,
+            CFWCryptexPathsCLI.self,
+            CFWPatchSeputilCLI.self,
+            CFWInjectDaemonsCLI.self,
+            CFWInjectDylibCLI.self,
         ],
         defaultSubcommand: VPhoneBootCLI.self
     )
