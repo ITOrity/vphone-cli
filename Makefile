@@ -36,7 +36,7 @@ export PATH := $(CURDIR)/$(TOOLS_PREFIX)/bin:$(CURDIR)/.build/release:$(PATH)
 
 # ─── Default ──────────────────────────────────────────────────────
 .PHONY: help
-help:
+help: patcher_build
 	"$(CURDIR)/$(PATCHER_BINARY)" workflow-help
 
 # ═══════════════════════════════════════════════════════════════════
@@ -45,7 +45,7 @@ help:
 
 .PHONY: setup_machine setup_tools
 
-setup_machine:
+setup_machine: patcher_build
 	"$(CURDIR)/$(PATCHER_BINARY)" setup-machine \
 		--project-root "$(CURDIR)" \
 		--vm-directory "$(VM_DIR)" \
@@ -70,7 +70,7 @@ setup_tools: patcher_build
 # ═══════════════════════════════════════════════════════════════════
 
 .PHONY: clean
-clean:
+clean: patcher_build
 	"$(CURDIR)/$(PATCHER_BINARY)" clean-project --project-root "$(CURDIR)"
 
 # ═══════════════════════════════════════════════════════════════════
@@ -177,7 +177,7 @@ restore: patcher_build
 ramdisk_build: patcher_build
 	"$(CURDIR)/$(PATCHER_BINARY)" build-ramdisk "$(VM_DIR_ABS)"
 
-ramdisk_send:
+ramdisk_send: patcher_build
 	"$(CURDIR)/$(PATCHER_BINARY)" send-ramdisk \
 		--ramdisk-dir "$(VM_DIR_ABS)/Ramdisk" \
 		$(if $(RAMDISK_UDID),--udid "$(RAMDISK_UDID)",$(if $(RESTORE_UDID),--udid "$(RESTORE_UDID)")) \
