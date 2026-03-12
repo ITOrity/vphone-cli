@@ -201,6 +201,64 @@ enum VPhoneHost {
         }
     }
 
+    static func resolveExecutableURL(
+        explicit: URL? = nil,
+        name: String,
+        additionalSearchDirectories: [URL] = []
+    ) throws -> URL {
+        if let explicit {
+            try requireFile(explicit)
+            guard FileManager.default.isExecutableFile(atPath: explicit.path) else {
+                throw VPhoneHostError.invalidArgument("Executable is not runnable: \(explicit.path)")
+            }
+            return explicit
+        }
+
+        var searchDirectories: [URL] = []
+        searchDirectories.append(contentsOf: additionalSearchDirectories)
+        searchDirectories.append(contentsOf: pathSearchDirectories())
+        searchDirectories.append(contentsOf: userPythonBinDirectories())
+
+        var seenPaths = Set<String>()
+        for directory in searchDirectories {
+            let normalized = directory.standardizedFileURL.path
+            guard seenPaths.insert(normalized).inserted else { continue }
+            let candidate = directory.appendingPathComponent(name)
+            if FileManager.default.isExecutableFile(atPath: candidate.path) {
+                return candidate
+            }
+        }
+
+        throw VPhoneHostError.missingFile("Executable '\(name)' not found. Install it or pass an explicit path.")
+    }
+
+    static func pathSearchDirectories() -> [URL] {
+        let defaultPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        let pathValue = ProcessInfo.processInfo.environment["PATH"] ?? defaultPath
+        return pathValue
+            .split(separator: ":")
+            .map { URL(fileURLWithPath: String($0), isDirectory: true) }
+    }
+
+    static func userPythonBinDirectories() -> [URL] {
+        let pythonRoot = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+            .appendingPathComponent("Library/Python", isDirectory: true)
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: pythonRoot,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        return entries
+            .filter {
+                (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+            }
+            .sorted { $0.lastPathComponent > $1.lastPathComponent }
+            .map { $0.appendingPathComponent("bin", isDirectory: true) }
+    }
+
     static func createSparseFile(at url: URL, size: UInt64) throws {
         let fileManager = FileManager.default
         if !fileManager.fileExists(atPath: url.path) {

@@ -317,10 +317,18 @@ struct StartAmfidontCLI: AsyncParsableCommand {
     @Option(name: .customLong("project-root"), help: "Project root path.", transform: URL.init(fileURLWithPath:))
     var projectRoot: URL = VPhoneHost.currentDirectoryURL()
 
-    @Option(name: .customLong("amfidont-bin"), help: "Path to amfidont.", transform: URL.init(fileURLWithPath:))
-    var amfidontBinary: URL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Python/3.9/bin/amfidont")
+    @Option(name: .customLong("amfidont-bin"), help: "Path to amfidont. Defaults to PATH/common install locations.", transform: URL.init(fileURLWithPath:))
+    var amfidontBinary: URL?
 
     mutating func run() async throws {
+        let amfidontBinary = try VPhoneHost.resolveExecutableURL(
+            explicit: amfidontBinary,
+            name: "amfidont",
+            additionalSearchDirectories: [
+                URL(fileURLWithPath: "/opt/homebrew/bin", isDirectory: true),
+                URL(fileURLWithPath: "/usr/local/bin", isDirectory: true),
+            ]
+        )
         try VPhoneHost.requireFile(amfidontBinary)
         let releaseBinary = projectRoot.appendingPathComponent(".build/release/vphone-cli")
         try VPhoneHost.requireFile(releaseBinary)
