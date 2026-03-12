@@ -631,8 +631,8 @@ private final class VPhoneCFWInstaller {
         let source = scriptDirectory.appendingPathComponent("tweakloader/TweakLoader.m")
         guard FileManager.default.fileExists(atPath: source.path) else { return }
 
-        let sdk = VPhoneHost.stringValue(try await VPhoneHost.runCommand("xcrun", arguments: ["--sdk", "iphoneos", "--show-sdk-path"], requireSuccess: true))
-        let clang = VPhoneHost.stringValue(try await VPhoneHost.runCommand("xcrun", arguments: ["--sdk", "iphoneos", "-f", "clang"], requireSuccess: true))
+        let sdk = try VPhoneAppleToolchain.sdkURL(platformName: "iPhoneOS").path
+        let clang = try VPhoneAppleToolchain.clangURL().path
         let output = temporaryDirectory.appendingPathComponent("TweakLoader.dylib")
         _ = try await VPhoneHost.runCommand(
             clang,

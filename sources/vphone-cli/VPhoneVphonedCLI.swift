@@ -75,25 +75,13 @@ struct VphonedBuilder {
             throw ValidationError("No Objective-C sources found in \(sourceDirectory.path)")
         }
 
-        let clang = VPhoneHost.stringValue(
-            try await VPhoneHost.runCommand(
-                "xcrun",
-                arguments: ["--sdk", "iphoneos", "-f", "clang"],
-                requireSuccess: true
-            )
-        )
-        let sdk = VPhoneHost.stringValue(
-            try await VPhoneHost.runCommand(
-                "xcrun",
-                arguments: ["--sdk", "iphoneos", "--show-sdk-path"],
-                requireSuccess: true
-            )
-        )
+        let clang = try VPhoneAppleToolchain.clangURL().path
+        let sdk = try VPhoneAppleToolchain.sdkURL(platformName: "iPhoneOS").path
         guard !clang.isEmpty else {
-            throw ValidationError("xcrun did not return a clang path")
+            throw ValidationError("Unable to locate clang in the active Xcode toolchain")
         }
         guard !sdk.isEmpty else {
-            throw ValidationError("xcrun did not return an iphoneos SDK path")
+            throw ValidationError("Unable to locate the iPhoneOS SDK")
         }
 
         let arguments = [
