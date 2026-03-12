@@ -37,65 +37,7 @@ export PATH := $(CURDIR)/$(TOOLS_PREFIX)/bin:$(CURDIR)/.build/release:$(PATH)
 # ─── Default ──────────────────────────────────────────────────────
 .PHONY: help
 help:
-	@echo "vphone-cli — Virtual iPhone boot tool"
-	@echo ""
-	@echo "LazyCat (AIO):"
-	@echo "  make setup_machine                   Full setup through First Boot"
-	@echo "    Options: JB=1                      Jailbreak firmware/CFW path"
-	@echo "             DEV=1                     Dev firmware/CFW path (dev TXM + cfw_install_dev)"
-	@echo "             CPU=8 MEMORY=8192         VM sizing passed to vm-create"
-	@echo "             DISK_SIZE=64              VM disk size in GB"
-	@echo "             IPHONE_SOURCE=...         Override iPhone IPSW URL/path"
-	@echo "             CLOUDOS_SOURCE=...        Override cloudOS IPSW URL/path"
-	@echo "             IPSW_DIR=...              Override IPSW cache directory"
-	@echo "             SKIP_PROJECT_SETUP=1      Skip setup_tools/build"
-	@echo "             NONE_INTERACTIVE=1        Auto-continue prompts + boot analysis"
-	@echo "             SUDO_PASSWORD=...         Preload sudo credential for setup flow"
-	@echo ""
-	@echo "Setup (one-time):"
-	@echo "  make setup_tools             Install required host tools (vendored ldid, git-lfs, inject)"
-	@echo ""
-	@echo "Build:"
-	@echo "  make build                   Build + sign vphone-cli"
-	@echo "  make vphoned                 Cross-compile + sign vphoned for iOS"
-	@echo "  make clean                   Remove all build artifacts (keeps IPSWs)"
-	@echo ""
-	@echo "VM management:"
-	@echo "  make vm_new                  Create VM directory with manifest (config.plist)"
-	@echo "    Options: VM_DIR=vm         VM directory name"
-	@echo "             CPU=8             CPU cores (stored in manifest)"
-	@echo "             MEMORY=8192       Memory in MB (stored in manifest)"
-	@echo "             DISK_SIZE=64      Disk size in GB (stored in manifest)"
-	@echo "  make boot_host_preflight     Diagnose whether host can launch signed PV=3 binary"
-	@echo "  make boot                    Boot VM (reads from config.plist)"
-	@echo "  make boot_dfu                Boot VM in DFU mode (reads from config.plist)"
-	@echo ""
-	@echo "Firmware pipeline:"
-	@echo "  make fw_prepare              Download IPSWs, extract, merge"
-	@echo "    Options: LIST_FIRMWARES=1  List downloadable iPhone IPSWs for IPHONE_DEVICE and exit"
-	@echo "             IPHONE_DEVICE=    Device identifier for firmware lookup (default: iPhone17,3)"
-	@echo "             IPHONE_VERSION=   Resolve a downloadable iPhone version to an IPSW URL"
-	@echo "             IPHONE_BUILD=     Resolve a downloadable iPhone build to an IPSW URL"
-	@echo "             IPHONE_SOURCE=    URL or local path to iPhone IPSW"
-	@echo "             CLOUDOS_SOURCE=   URL or local path to cloudOS IPSW"
-	@echo "  make fw_patch                Patch boot chain with Swift pipeline (regular variant)"
-	@echo "  make fw_patch_dev            Patch boot chain with Swift pipeline (dev mode TXM patches)"
-	@echo "  make fw_patch_jb             Patch boot chain with Swift pipeline (dev + JB extensions)"
-	@echo ""
-	@echo "Restore:"
-	@echo "  make restore_get_shsh        Request restore personalization data"
-	@echo "  make restore                 Restore firmware to the connected device"
-	@echo ""
-	@echo "Ramdisk:"
-	@echo "  make ramdisk_build           Build signed SSH ramdisk"
-	@echo "  make ramdisk_send            Send ramdisk to device"
-	@echo ""
-	@echo "CFW:"
-	@echo "  make cfw_install             Install CFW mods via SSH"
-	@echo "  make cfw_install_dev         Install CFW mods via SSH (dev mode)"
-	@echo "  make cfw_install_jb          Install CFW + JB extensions (jetsam/procursus/basebin)"
-	@echo ""
-	@echo "Variables: VM_DIR=$(VM_DIR) CPU=$(CPU) MEMORY=$(MEMORY) DISK_SIZE=$(DISK_SIZE)"
+	"$(CURDIR)/$(PATCHER_BINARY)" workflow-help
 
 # ═══════════════════════════════════════════════════════════════════
 # Setup
@@ -129,8 +71,7 @@ setup_tools: patcher_build
 
 .PHONY: clean
 clean:
-	@echo "=== Cleaning all untracked files (preserving IPSWs) ==="
-	git clean -fdx -e '*.ipsw' -e '*_Restore*'
+	"$(CURDIR)/$(PATCHER_BINARY)" clean-project --project-root "$(CURDIR)"
 
 # ═══════════════════════════════════════════════════════════════════
 # Build

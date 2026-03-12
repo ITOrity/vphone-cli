@@ -72,6 +72,12 @@ struct VPhoneMain {
             case var command as BuildVphonedCLI:
                 try await command.run()
 
+            case var command as WorkflowHelpCLI:
+                try command.run()
+
+            case var command as CleanProjectCLI:
+                try await command.run()
+
             case var command as CFWInstallCLI:
                 try await command.run()
 

@@ -23,6 +23,8 @@ struct VPhoneCLI: ParsableCommand {
             BuildHostCLI.self,
             BundleAppCLI.self,
             BuildVphonedCLI.self,
+            WorkflowHelpCLI.self,
+            CleanProjectCLI.self,
             CFWInstallCLI.self,
             USBMuxListCLI.self,
             USBMuxForwardCLI.self,
