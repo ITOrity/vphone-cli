@@ -131,7 +131,7 @@ struct BuildRamdiskCLI: AsyncParsableCommand {
 private extension BuildRamdiskCLI {
     func findSHSH(in directory: URL) throws -> URL {
         let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
-            .filter { $0.pathExtension == "shsh" || $0.pathExtension == "shsh2" }
+            .filter { ["shsh", "shsh2", "im4m"].contains($0.pathExtension.lowercased()) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
         guard let first = files.first else {
             throw ValidationError("No SHSH blob found in \(directory.path)/. Place your .shsh file in the shsh/ directory.")
@@ -209,6 +209,10 @@ private extension BuildRamdiskCLI {
         var data = try Data(contentsOf: shshURL)
         if data.starts(with: [0x1F, 0x8B]) {
             data = try await VPhoneHost.runCommandData("/usr/bin/gunzip", arguments: ["-c", shshURL.path], requireSuccess: true).standardOutput
+        }
+
+        if (try? IM4M(data)) != nil {
+            return data
         }
 
         let plist = try PropertyListSerialization.propertyList(from: data, options: [], format: nil)

@@ -44,6 +44,12 @@ struct VPhoneMain {
             case var command as PrepareFirmwareCLI:
                 try await command.run()
 
+            case var command as RestoreGetSHSHCLI:
+                try await command.run()
+
+            case var command as RestoreDeviceCLI:
+                try await command.run()
+
             case var command as BuildRamdiskCLI:
                 try await command.run()
 

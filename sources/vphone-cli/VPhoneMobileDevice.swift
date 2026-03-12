@@ -204,7 +204,7 @@ enum MobileDeviceTransportError: Error, CustomStringConvertible {
     }
 }
 
-private final class MobileDeviceObject {
+fileprivate final class MobileDeviceObject {
     let object: AnyObject
 
     init(_ object: AnyObject) {
@@ -264,7 +264,7 @@ enum MobileDeviceRamdiskTransport {
         throw MobileDeviceTransportError.deviceNotFound("Timed out waiting for recovery mode device")
     }
 
-    private static func findRecoveryDevice(ecid: UInt64?) throws -> MobileDeviceObject {
+    fileprivate static func findRecoveryDevice(ecid: UInt64?) throws -> MobileDeviceObject {
         let create: RecoveryCreateFn = try requireExportedSymbol("_AMRecoveryModeDeviceCreateWithIOService")
         let getECID: RecoveryECIDFn = try requireExportedSymbol("_AMRecoveryModeDeviceGetECID")
 
@@ -281,7 +281,7 @@ enum MobileDeviceRamdiskTransport {
         )
     }
 
-    private static func findDFUUSBDevice(ecid: UInt64?) throws -> MobileDeviceObject {
+    fileprivate static func findDFUUSBDevice(ecid: UInt64?) throws -> MobileDeviceObject {
         let createUSB: USBCreateFn = try requireLocalSymbol("__AMRUSBDeviceCreateDevice")
         let createDFU: DFUCreateFn = try requireLocalSymbol("__AMDFUModeDeviceCreate")
         let getECID: DFUECIDFn = try requireExportedSymbol("_AMDFUModeDeviceGetECID")
@@ -302,7 +302,28 @@ enum MobileDeviceRamdiskTransport {
         )
     }
 
-    private static func findDevice(serviceName: String, creator: (io_service_t) -> MobileDeviceObject?, failureLabel: String?) throws -> MobileDeviceObject {
+    fileprivate static func findDFUDevice(ecid: UInt64?) throws -> MobileDeviceObject {
+        let createUSB: USBCreateFn = try requireLocalSymbol("__AMRUSBDeviceCreateDevice")
+        let createDFU: DFUCreateFn = try requireLocalSymbol("__AMDFUModeDeviceCreate")
+        let getECID: DFUECIDFn = try requireExportedSymbol("_AMDFUModeDeviceGetECID")
+
+        return try findDevice(
+            serviceName: dfuServiceName,
+            creator: { service in
+                guard let usbDevice = createUSB(service)?.takeRetainedValue() else { return nil }
+                guard let dfuDevice = createDFU(kCFAllocatorDefault, usbDevice, nil)?.takeRetainedValue() else {
+                    return nil
+                }
+                if let ecid, getECID(dfuDevice) != ecid {
+                    return nil
+                }
+                return MobileDeviceObject(dfuDevice)
+            },
+            failureLabel: ecid.map { "No DFU mode device matched ECID 0x\(String($0, radix: 16).uppercased())" }
+        )
+    }
+
+    fileprivate static func findDevice(serviceName: String, creator: (io_service_t) -> MobileDeviceObject?, failureLabel: String?) throws -> MobileDeviceObject {
         guard let matching = IOServiceNameMatching(serviceName) else {
             throw MobileDeviceTransportError.deviceNotFound("Failed to create IOService match dictionary for \(serviceName)")
         }
@@ -324,17 +345,121 @@ enum MobileDeviceRamdiskTransport {
         throw MobileDeviceTransportError.deviceNotFound(failureLabel ?? "No \(serviceName) device found")
     }
 
-    static func requireExportedSymbol<T>(_ name: String) throws -> T {
+    fileprivate static func requireExportedSymbol<T>(_ name: String) throws -> T {
         guard let symbol: T = MobileDeviceImage.exported(name) else {
             throw MobileDeviceTransportError.missingSymbol(name)
         }
         return symbol
     }
 
-    static func requireLocalSymbol<T>(_ name: String) throws -> T {
+    fileprivate static func requireLocalSymbol<T>(_ name: String) throws -> T {
         guard let symbol: T = MobileDeviceImage.local(name) else {
             throw MobileDeviceTransportError.missingSymbol(name)
         }
         return symbol
+    }
+}
+
+enum MobileDeviceRestore {
+    typealias RestoreDefaultOptionsFn = @convention(c) (CFAllocator?) -> Unmanaged<CFMutableDictionary>?
+    typealias DFUPreflightFn = @convention(c) (AnyObject, CFDictionary, UnsafeMutablePointer<Unmanaged<CFDictionary>?>?) -> Int32
+    typealias DFURestoreFn = @convention(c) (AnyObject, CFDictionary, UnsafeMutableRawPointer?, UnsafeMutablePointer<Unmanaged<CFError>?>?) -> Int32
+
+    static let restoreBundlePathKey = "RestoreBundlePath"
+    static let sourceRestoreBundlePathKey = "SourceRestoreBundlePath"
+    static let personalizedRestoreBundlePathKey = "PersonalizedRestoreBundlePath"
+    static let preservePersonalizedBundlesKey = "AuthInstallPreservePersonalizedBundles"
+
+    static func requestPersonalization(restoreBundlePath: String, personalizedBundlePath: String, ecid: UInt64?) throws -> URL {
+        let dfuDevice = try MobileDeviceRamdiskTransport.findDFUDevice(ecid: ecid)
+        let options = try buildRestoreOptions(
+            restoreBundlePath: restoreBundlePath,
+            personalizedBundlePath: personalizedBundlePath
+        )
+
+        let preflight: DFUPreflightFn = try MobileDeviceRamdiskTransport.requireExportedSymbol("_AMDFUModeDeviceCopyAuthInstallPreflightOptions")
+        var personalizedOptions: Unmanaged<CFDictionary>?
+        let status = preflight(dfuDevice.object, options, &personalizedOptions)
+        guard status == 0 else {
+            throw MobileDeviceTransportError.transferFailed("DFU personalization preflight failed with code \(status)")
+        }
+
+        if let personalizedOptions {
+            merge(options: options, overlay: personalizedOptions.takeRetainedValue())
+        }
+
+        let bundleURL = resolvedPersonalizedBundleURL(options: options, fallbackPath: personalizedBundlePath)
+        guard let ticketURL = findPersonalizedTicket(in: bundleURL) else {
+            throw MobileDeviceTransportError.transferFailed("Personalization completed but no ticket was found in \(bundleURL.path)")
+        }
+        return ticketURL
+    }
+
+    static func restore(restoreBundlePath: String, personalizedBundlePath: String?, ecid: UInt64?) throws {
+        let dfuDevice = try MobileDeviceRamdiskTransport.findDFUDevice(ecid: ecid)
+        let options = try buildRestoreOptions(
+            restoreBundlePath: restoreBundlePath,
+            personalizedBundlePath: personalizedBundlePath
+        )
+
+        let restore: DFURestoreFn = try MobileDeviceRamdiskTransport.requireExportedSymbol("_AMRestorePerformDFURestore")
+        var restoreError: Unmanaged<CFError>?
+        let status = restore(dfuDevice.object, options, nil, &restoreError)
+        guard status == 0 else {
+            let message = restoreError?.takeRetainedValue().localizedDescription ?? "DFU restore failed"
+            throw MobileDeviceTransportError.transferFailed("\(message) (code \(status))")
+        }
+    }
+
+    static func buildRestoreOptions(restoreBundlePath: String, personalizedBundlePath: String?) throws -> NSMutableDictionary {
+        let create: RestoreDefaultOptionsFn = try MobileDeviceRamdiskTransport.requireExportedSymbol("_AMRestoreCreateDefaultOptions")
+        guard let defaultOptions = create(kCFAllocatorDefault)?.takeRetainedValue() else {
+            throw MobileDeviceTransportError.transferFailed("Failed to create default restore options")
+        }
+        let options = defaultOptions as NSMutableDictionary
+
+        options[restoreBundlePathKey] = restoreBundlePath
+        options[sourceRestoreBundlePathKey] = restoreBundlePath
+        options[preservePersonalizedBundlesKey] = kCFBooleanTrue
+        if let personalizedBundlePath {
+            options[personalizedRestoreBundlePathKey] = personalizedBundlePath
+        }
+        return options
+    }
+
+    static func merge(options: NSMutableDictionary, overlay: CFDictionary) {
+        let dictionary = overlay as NSDictionary
+        for (key, value) in dictionary {
+            options[key] = value
+        }
+    }
+
+    static func resolvedPersonalizedBundleURL(options: NSDictionary, fallbackPath: String) -> URL {
+        if let path = options[personalizedRestoreBundlePathKey] as? String, !path.isEmpty {
+            return URL(fileURLWithPath: path, isDirectory: true)
+        }
+        return URL(fileURLWithPath: fallbackPath, isDirectory: true)
+    }
+
+    static func findPersonalizedTicket(in bundleURL: URL) -> URL? {
+        let fileManager = FileManager.default
+        guard let enumerator = fileManager.enumerator(at: bundleURL, includingPropertiesForKeys: [.isRegularFileKey]) else {
+            return nil
+        }
+
+        for case let fileURL as URL in enumerator {
+            guard
+                let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey]),
+                values.isRegularFile == true
+            else {
+                continue
+            }
+
+            let lowercased = fileURL.lastPathComponent.lowercased()
+            if lowercased.hasSuffix(".im4m") || lowercased.contains("apticket") {
+                return fileURL
+            }
+        }
+        return nil
     }
 }

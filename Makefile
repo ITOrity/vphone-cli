@@ -250,17 +250,17 @@ fw_patch_jb: patcher_build
 
 .PHONY: restore_get_shsh restore
 
-restore_get_shsh:
-	cd $(VM_DIR) && idevicerestore \
-		$(if $(RESTORE_UDID),-u $(RESTORE_UDID),) \
-		$(if $(RESTORE_ECID),-i $(RESTORE_ECID),) \
-		-e -y ./iPhone*_Restore -t
+restore_get_shsh: patcher_build
+	cd $(VM_DIR) && \
+		RESTORE_UDID="$(RESTORE_UDID)" \
+		RESTORE_ECID="$(RESTORE_ECID)" \
+		"$(CURDIR)/$(PATCHER_BINARY)" restore-get-shsh .
 
-restore:
-	cd $(VM_DIR) && idevicerestore \
-		$(if $(RESTORE_UDID),-u $(RESTORE_UDID),) \
-		$(if $(RESTORE_ECID),-i $(RESTORE_ECID),) \
-		-e -y ./iPhone*_Restore
+restore: patcher_build
+	cd $(VM_DIR) && \
+		RESTORE_UDID="$(RESTORE_UDID)" \
+		RESTORE_ECID="$(RESTORE_ECID)" \
+		"$(CURDIR)/$(PATCHER_BINARY)" restore-device .
 
 # ═══════════════════════════════════════════════════════════════════
 # Ramdisk
