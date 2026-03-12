@@ -1,7 +1,6 @@
 // FirmwareManifest.swift — BuildManifest/Restore.plist generation.
 //
-// Translated from: scripts/fw_manifest.py
-//
+// Swift-native manifest generator used by the host workflow.
 // Merges cloudOS boot-chain (vresearch101ap) with vphone600 runtime components
 // (device tree, SEP, kernel) and iPhone OS images into a single DFU erase-install
 // Build Identity.

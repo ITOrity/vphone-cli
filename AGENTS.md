@@ -123,7 +123,7 @@ research/                         # Detailed firmware/patch documentation
 - **Private APIs:** Use `Dynamic()` for runtime method dispatch. Touch objects use `NSClassFromString` + KVC to avoid designated initializer crashes.
 - **NSWindow `isReleasedWhenClosed`:** Always set `window.isReleasedWhenClosed = false` for programmatically created windows managed by an `NSWindowController`. The default `true` causes `objc_release` crashes on dangling pointers during CA transaction commit.
 
-### Shell Scripts
+### Guest Shell Scripts
 
 - Use `zsh` with `set -euo pipefail`.
 - Scripts resolve their own directory via `${0:a:h}` or `$(cd "$(dirname "$0")" && pwd)`.
