@@ -1,6 +1,8 @@
 import AppKit
+import Darwin
 import Foundation
 import ImageIO
+import VPhoneCore
 
 // MARK: - Host Control Socket
 
@@ -97,6 +99,13 @@ class VPhoneHostControl {
         guard bindResult == 0 else {
             print("[hostctl] bind failed: \(String(cString: strerror(errno)))")
             close(fd)
+            return
+        }
+
+        guard chmod(socketPath, mode_t(0o600)) == 0 else {
+            print("[hostctl] chmod failed: \(String(cString: strerror(errno)))")
+            close(fd)
+            unlink(socketPath)
             return
         }
 
@@ -221,7 +230,24 @@ class VPhoneHostControl {
         while true {
             let clientFD = accept(listenFD, nil, nil)
             guard clientFD >= 0 else { break }
+            configureClient(clientFD)
             handleClient(clientFD, controller: controller)
+        }
+    }
+
+    private nonisolated static func configureClient(_ fd: Int32) {
+        var timeout = timeval(
+            tv_sec: Int(VPhoneHostControlLimits.clientReadTimeoutSeconds),
+            tv_usec: 0
+        )
+        withUnsafePointer(to: &timeout) { pointer in
+            _ = setsockopt(
+                fd,
+                SOL_SOCKET,
+                SO_RCVTIMEO,
+                pointer,
+                socklen_t(MemoryLayout<timeval>.size)
+            )
         }
     }
 
@@ -240,8 +266,15 @@ class VPhoneHostControl {
 
         // Whether to include a compact screenshot in the response (default: true)
         let wantScreen = json["screen"] as? Bool ?? true
-        // Delay before screenshot (ms) — lets animations settle
-        let screenDelay = json["delay"] as? Int ?? 500
+        let screenDelay: Int
+        do {
+            screenDelay = try VPhoneHostControlLimits.delay(
+                VPhoneHostControlLimits.integerField(json["delay"], name: "delay")
+            )
+        } catch {
+            writeResponse(fd, ok: false, error: "invalid delay: \(error)")
+            return
+        }
 
         switch type {
         case "screenshot":
@@ -284,6 +317,12 @@ class VPhoneHostControl {
                 writeResponse(fd, ok: false, error: "tap requires x and y (pixel coordinates)")
                 return
             }
+            guard let x = try? VPhoneHostControlLimits.coordinate(x, name: "x"),
+                  let y = try? VPhoneHostControlLimits.coordinate(y, name: "y")
+            else {
+                writeResponse(fd, ok: false, error: "tap coordinates must be finite")
+                return
+            }
             let semaphore = DispatchSemaphore(value: 0)
             let result = ResultBox()
 
@@ -314,7 +353,23 @@ class VPhoneHostControl {
                 writeResponse(fd, ok: false, error: "swipe requires x1, y1, x2, y2")
                 return
             }
-            let durationMs = json["ms"] as? Int ?? 300
+            guard let x1 = try? VPhoneHostControlLimits.coordinate(x1, name: "x1"),
+                  let y1 = try? VPhoneHostControlLimits.coordinate(y1, name: "y1"),
+                  let x2 = try? VPhoneHostControlLimits.coordinate(x2, name: "x2"),
+                  let y2 = try? VPhoneHostControlLimits.coordinate(y2, name: "y2")
+            else {
+                writeResponse(fd, ok: false, error: "swipe coordinates must be finite")
+                return
+            }
+            let durationMs: Int
+            do {
+                durationMs = try VPhoneHostControlLimits.swipeDuration(
+                    VPhoneHostControlLimits.integerField(json["ms"], name: "ms")
+                )
+            } catch {
+                writeResponse(fd, ok: false, error: "invalid swipe duration: \(error)")
+                return
+            }
             let semaphore = DispatchSemaphore(value: 0)
             let result = ResultBox()
 
@@ -378,8 +433,22 @@ class VPhoneHostControl {
             writeResponse(fd, ok: result.ok, error: result.error, image: result.imageBase64)
 
         case "type":
-            guard let text = json["text"] as? String else {
+            let rawText: String?
+            do {
+                rawText = try VPhoneHostControlLimits.stringField(json["text"], name: "text")
+            } catch {
                 writeResponse(fd, ok: false, error: "type requires text")
+                return
+            }
+            guard let rawText else {
+                writeResponse(fd, ok: false, error: "type requires text")
+                return
+            }
+            let text: String
+            do {
+                text = try VPhoneHostControlLimits.text(rawText)
+            } catch {
+                writeResponse(fd, ok: false, error: "type text is too large")
                 return
             }
             let semaphore = DispatchSemaphore(value: 0)
@@ -417,7 +486,7 @@ class VPhoneHostControl {
         var buffer = [UInt8](repeating: 0, count: 4096)
         var accumulated = Data()
 
-        while accumulated.count < 4096 {
+        while accumulated.count < VPhoneHostControlLimits.maxRequestBytes {
             let n = read(fd, &buffer, buffer.count)
             guard n > 0 else { break }
             accumulated.append(contentsOf: buffer[..<n])
@@ -427,7 +496,7 @@ class VPhoneHostControl {
         if let nlRange = accumulated.firstIndex(of: 0x0A) {
             return String(data: accumulated[..<nlRange], encoding: .utf8)
         }
-        return accumulated.isEmpty ? nil : String(data: accumulated, encoding: .utf8)
+        return nil
     }
 
     private nonisolated static func writeResponse(
