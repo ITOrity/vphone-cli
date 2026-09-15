@@ -265,7 +265,16 @@ class VPhoneHostControl {
         }
 
         // Whether to include a compact screenshot in the response (default: true)
-        let wantScreen = json["screen"] as? Bool ?? true
+        let wantScreen: Bool
+        if let rawScreen = json["screen"] {
+            guard let screen = rawScreen as? Bool else {
+                writeResponse(fd, ok: false, error: "screen must be a boolean")
+                return
+            }
+            wantScreen = screen
+        } else {
+            wantScreen = true
+        }
         let screenDelay: Int
         do {
             screenDelay = try VPhoneHostControlLimits.delay(
@@ -277,6 +286,9 @@ class VPhoneHostControl {
         }
 
         switch type {
+        case "ping":
+            writeResponse(fd, ok: true)
+
         case "screenshot":
             let outputPath = json["path"] as? String
             let semaphore = DispatchSemaphore(value: 0)
