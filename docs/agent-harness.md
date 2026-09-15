@@ -57,6 +57,9 @@ chmod 600 /path/to/local/signcert.p12
 VPHONE_SIGNCERT=/path/to/local/signcert.p12 make vphoned
 ```
 
+The `scripts/resources` storage submodule is pinned to the sanitized fork and
+its `cfw_input` archive is checked to contain no signing credential.
+
 Guest Sileo/apt/extra-deb installation is disabled unless the caller
 explicitly sets `VPHONE_ALLOW_INSECURE_PACKAGES=1`. Downloaded `.deb` files are
 otherwise accepted only with a SHA-256 manifest next to `debs.list` or at the
