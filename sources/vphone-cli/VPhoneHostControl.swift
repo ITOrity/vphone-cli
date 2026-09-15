@@ -241,13 +241,15 @@ class VPhoneHostControl {
             tv_usec: 0
         )
         withUnsafePointer(to: &timeout) { pointer in
-            _ = setsockopt(
-                fd,
-                SOL_SOCKET,
-                SO_RCVTIMEO,
-                pointer,
-                socklen_t(MemoryLayout<timeval>.size)
-            )
+            for option in [SO_RCVTIMEO, SO_SNDTIMEO] {
+                _ = setsockopt(
+                    fd,
+                    SOL_SOCKET,
+                    option,
+                    pointer,
+                    socklen_t(MemoryLayout<timeval>.size)
+                )
+            }
         }
     }
 

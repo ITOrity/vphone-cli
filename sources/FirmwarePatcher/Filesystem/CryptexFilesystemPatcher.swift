@@ -68,6 +68,16 @@ public final class CryptexFilesystemPatcher: Patcher {
             try? FileManager.default.removeItem(at: tmp)
         }
     }
+
+    private func signingCertificateURL() throws -> URL {
+        guard let certificate = resources.signcert else {
+            throw ProcessError.failed(
+                1,
+                "VPHONE_SIGNCERT must point to a readable owner-only signing certificate"
+            )
+        }
+        return certificate
+    }
     
     // MARK: - Patcher
     
@@ -188,7 +198,7 @@ public final class CryptexFilesystemPatcher: Patcher {
         ])
         _ = try runProcess("/bin/chmod", ["0755", launchdCacheLoaderPath.path])
         
-        let signingCertificatePath = cfwInput.appending(path: "cfw_input/signcert.p12")
+        let signingCertificatePath = try signingCertificateURL()
         _ = try runProcess("/opt/homebrew/bin/ldid", [
             "-S", "-M", "-K\(signingCertificatePath.path)",
             "-Icom.apple.launchd_cache_loader",
@@ -258,7 +268,7 @@ public final class CryptexFilesystemPatcher: Patcher {
         // Sign
         let targetBin = target.appending(path: "/usr/bin/vphoned")
         try FileManager.default.copyItem(at: vphonedBin, to: targetBin)
-        let signingCertificatePath = cfwInput.appending(path: "cfw_input/signcert.p12")
+        let signingCertificatePath = try signingCertificateURL()
         _ = try runProcess("/opt/homebrew/bin/ldid", [
             "-S\(vphonedSrc.appendingPathComponent("entitlements.plist").path)",
             "-M", "-K\(signingCertificatePath.path)",
@@ -336,7 +346,7 @@ public final class CryptexFilesystemPatcher: Patcher {
         ])
         _ = try runProcess("/bin/chmod", ["0755", mobileActivationdPath.path])
         
-        let signingCertificatePath = cfwInput.appending(path: "cfw_input/signcert.p12")
+        let signingCertificatePath = try signingCertificateURL()
         _ = try runProcess("/opt/homebrew/bin/ldid", [
             "-S", "-M", "-K\(signingCertificatePath.path)",
             mobileActivationdPath.path
