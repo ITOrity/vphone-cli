@@ -497,8 +497,13 @@ class VPhoneHostControl {
     private nonisolated static func readLine(from fd: Int32) -> String? {
         var buffer = [UInt8](repeating: 0, count: 4096)
         var accumulated = Data()
+        let deadline = DispatchTime.now().uptimeNanoseconds
+            + UInt64(VPhoneHostControlLimits.clientReadTimeoutSeconds) * 1_000_000_000
 
         while accumulated.count < VPhoneHostControlLimits.maxRequestBytes {
+            if DispatchTime.now().uptimeNanoseconds >= deadline {
+                return nil
+            }
             let n = read(fd, &buffer, buffer.count)
             guard n > 0 else { break }
             accumulated.append(contentsOf: buffer[..<n])
@@ -506,6 +511,7 @@ class VPhoneHostControl {
         }
 
         if let nlRange = accumulated.firstIndex(of: 0x0A) {
+            guard nlRange <= VPhoneHostControlLimits.maxRequestBytes else { return nil }
             return String(data: accumulated[..<nlRange], encoding: .utf8)
         }
         return nil
