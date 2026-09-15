@@ -25,6 +25,7 @@ set -euo pipefail
 
 VM_DIR="${1:-.}"
 SCRIPT_DIR="${0:a:h}"
+SIGNCERT="$("$SCRIPT_DIR/require_signing_cert.sh")"
 
 # Resolve absolute paths
 VM_DIR="$(cd "$VM_DIR" && pwd)"
@@ -70,7 +71,7 @@ check_prerequisites() {
 
 ldid_sign() {
     local file="$1" bundle_id="${2:-}"
-    local args=(-S -M "-K$VM_DIR/$CFW_INPUT/signcert.p12")
+    local args=(-S -M "-K$SIGNCERT")
     [[ -n "$bundle_id" ]] && args+=("-I$bundle_id")
     ldid "${args[@]}" "$file"
 }
@@ -80,7 +81,7 @@ ldid_sign() {
 # profile + private DA/apfs entitlements).
 ldid_sign_ent() {
     local file="$1" ent="$2" bundle_id="${3:-}"
-    local args=("-S$ent" -M "-K$VM_DIR/$CFW_INPUT/signcert.p12")
+    local args=("-S$ent" -M "-K$SIGNCERT")
     [[ -n "$bundle_id" ]] && args+=("-I$bundle_id")
     ldid "${args[@]}" "$file"
 }
@@ -132,13 +133,17 @@ find_restore_dir() {
 
 # ── Setup input resources ──────────────────────────────────────
 setup_cfw_input() {
-    [[ -d "$VM_DIR/$CFW_INPUT" ]] && return
+    if [[ -d "$VM_DIR/$CFW_INPUT" ]]; then
+        rm -f "$VM_DIR/$CFW_INPUT/signcert.p12"
+        return
+    fi
     local archive
     for search_dir in "$SCRIPT_DIR/resources" "$SCRIPT_DIR" "$VM_DIR"; do
         archive="$search_dir/$CFW_ARCHIVE"
         if [[ -f "$archive" ]]; then
             echo "  Extracting $CFW_ARCHIVE..."
             "$TAR" --zstd --warning=no-unknown-keyword -xf "$archive" -C "$VM_DIR"
+            rm -f "$VM_DIR/$CFW_INPUT/signcert.p12"
             return
         fi
     done
@@ -538,7 +543,7 @@ fi
 cp "$VPHONED_BIN" "$TEMP_DIR/vphoned"
 ldid \
     -S"$VPHONED_SRC/entitlements.plist" \
-    -M "-K$VM_DIR/$CFW_INPUT/signcert.p12" \
+    -M "-K$SIGNCERT" \
     "$TEMP_DIR/vphoned"
 cp -R "$TEMP_DIR/vphoned" "$MNT1/usr/bin/vphoned"
 /bin/chmod 0755 $MNT1/usr/bin/vphoned

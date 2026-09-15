@@ -17,6 +17,7 @@ set -euo pipefail
 [[ -n "${_VPHONE_PATH:-}" ]] && export PATH="$_VPHONE_PATH"
 VM_DIR="${1:-.}"
 SCRIPT_DIR="${0:a:h}"
+SIGNCERT="$("$SCRIPT_DIR/require_signing_cert.sh")"
 
 # ── Python resolver — prefer project venv over whatever is in PATH ─
 # Resolves to .venv/bin/python3 relative to the project root (parent of
@@ -73,14 +74,14 @@ check_prerequisites() {
 
 ldid_sign() {
     local file="$1" bundle_id="${2:-}"
-    local args=(-S -M "-K$VM_DIR/$CFW_INPUT/signcert.p12")
+    local args=(-S -M "-K$SIGNCERT")
     [[ -n "$bundle_id" ]] && args+=("-I$bundle_id")
     ldid "${args[@]}" "$file"
 }
 
 ldid_sign_ent() {
     local file="$1" entitlements_plist="$2" bundle_id="${3:-}"
-    local args=("-S$entitlements_plist" "-K$VM_DIR/$CFW_INPUT/signcert.p12")
+    local args=("-S$entitlements_plist" "-K$SIGNCERT")
     [[ -n "$bundle_id" ]] && args+=("-I$bundle_id")
     ldid "${args[@]}" "$file"
 }
@@ -245,7 +246,7 @@ fi
 
 # Re-sign with original entitlements to avoid "operation not permitted" on spawn
 if [[ -s "$TEMP_DIR/launchd.entitlements" ]]; then
-    ldid -S"$TEMP_DIR/launchd.entitlements" -M "-K$VM_DIR/$CFW_INPUT/signcert.p12" "$TEMP_DIR/launchd"
+    ldid -S"$TEMP_DIR/launchd.entitlements" -M "-K$SIGNCERT" "$TEMP_DIR/launchd"
 else
     ldid_sign "$TEMP_DIR/launchd"
 fi

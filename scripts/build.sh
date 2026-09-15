@@ -49,7 +49,6 @@ mkdir -p "${BUNDLE}/Contents/MacOS" "${BUNDLE}/Contents/Resources"
 cp -f "$BINARY" "$BUNDLE_BIN"
 cp -f "$INFO_PLIST" "${BUNDLE}/Contents/Info.plist"
 cp -f "sources/AppIcon.icns" "${BUNDLE}/Contents/Resources/AppIcon.icns"
-cp -f "scripts/vphoned/signcert.p12" "${BUNDLE}/Contents/Resources/signcert.p12"
 cp -f "$(command -v ldid)" "${BUNDLE}/Contents/MacOS/ldid"
 codesign --force --sign - "${BUNDLE}/Contents/MacOS/ldid"
 codesign --force --sign - --entitlements "$ENTITLEMENTS" "$BUNDLE_BIN"
@@ -59,6 +58,7 @@ echo "  bundled → ${BUNDLE}"
 if [[ "$BUILD_VPHONED" -eq 1 ]]; then
   command -v ldid >/dev/null 2>&1 \
     || { echo "Error: ldid not found. Run: brew install ldid-procursus" >&2; exit 1; }
+  SIGNCERT="$(scripts/require_signing_cert.sh)"
   echo "=== Building vphoned ==="
   make -C scripts/vphoned GIT_HASH="$GIT_HASH"
   echo "=== Signing vphoned ==="
@@ -66,7 +66,7 @@ if [[ "$BUILD_VPHONED" -eq 1 ]]; then
   cp scripts/vphoned/vphoned .build/vphoned.signed
   ldid \
     -Sscripts/vphoned/entitlements.plist \
-    -M "-Kscripts/vphoned/signcert.p12" \
+    -M "-K${SIGNCERT}" \
     .build/vphoned.signed
   echo "  signed → .build/vphoned.signed"
 fi

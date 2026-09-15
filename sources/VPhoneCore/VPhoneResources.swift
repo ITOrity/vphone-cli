@@ -58,7 +58,32 @@ public struct VPhoneResources: Sendable {
     public var pmd3Bridge: URL { scriptsDir.appendingPathComponent("pymobiledevice3_bridge.py") }
     public var cfwPy: URL { patchersDir.appendingPathComponent("cfw.py") }
     public var apfsSnapRename: URL { base.appendingPathComponent("tools/apfs_snap_rename.py") }
-    public var signcert: URL { scriptsDir.appendingPathComponent("vphoned/signcert.p12") }
+    /// External signing credential used by local firmware/IPA workflows.
+    ///
+    /// Credentials are intentionally never resolved from repository resources.
+    /// Set `VPHONE_SIGNCERT` to a regular file with owner-only permissions.
+    public var signcert: URL? { Self.externalSigningCertificateURL() }
+
+    public static func externalSigningCertificateURL(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> URL? {
+        guard let rawPath = environment["VPHONE_SIGNCERT"], !rawPath.isEmpty else {
+            return nil
+        }
+
+        let url = URL(fileURLWithPath: rawPath).standardizedFileURL
+        let fileManager = FileManager.default
+        guard fileManager.isReadableFile(atPath: url.path),
+              fileManager.fileExists(atPath: url.path),
+              let attributes = try? fileManager.attributesOfItem(atPath: url.path),
+              (attributes[.type] as? FileAttributeType) == .typeRegular,
+              let permissions = attributes[.posixPermissions] as? NSNumber,
+              permissions.intValue & 0o077 == 0
+        else {
+            return nil
+        }
+        return url
+    }
 
     public var vphoned: URL {
         let bundled = base.appendingPathComponent("vphoned.signed")

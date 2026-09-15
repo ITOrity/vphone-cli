@@ -23,10 +23,11 @@ static int copy_data(struct archive *ar, struct archive *aw) {
 int vp_extract_archive(NSString *archivePath, NSString *extractionPath, NSString **errorOutput) {
     int flags = ARCHIVE_EXTRACT_TIME
               | ARCHIVE_EXTRACT_PERM
-              | ARCHIVE_EXTRACT_SECURE_NODOTDOT;
+              | ARCHIVE_EXTRACT_SECURE_NODOTDOT
+              | ARCHIVE_EXTRACT_SECURE_SYMLINKS;
 
-    // Resolve symlinks in extractionPath (e.g. /tmp -> /private/tmp on iOS)
-    // so ARCHIVE_EXTRACT_SECURE_SYMLINKS doesn't reject trusted system symlinks.
+    // Resolve the extraction root first, then keep libarchive's symlink guard
+    // enabled so archive entries cannot redirect writes outside this root.
     NSString *resolvedPath = [extractionPath stringByResolvingSymlinksInPath];
     NSLog(@"vphoned: extract %@ -> %@ (resolved: %@)", archivePath, extractionPath, resolvedPath);
 

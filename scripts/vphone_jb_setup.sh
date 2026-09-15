@@ -15,6 +15,10 @@ DONE_MARKER="/var/mobile/.vphone_jb_setup_done"
 
 export TERM=xterm-256color
 export DEBIAN_FRONTEND=noninteractive
+ALLOW_INSECURE_PACKAGES="${VPHONE_ALLOW_INSECURE_PACKAGES:-0}"
+if [ "$ALLOW_INSECURE_PACKAGES" != "0" ] && [ "$ALLOW_INSECURE_PACKAGES" != "1" ]; then
+    ALLOW_INSECURE_PACKAGES=0
+fi
 P=""
 for d in \
     /var/jb/usr/bin /var/jb/bin /var/jb/sbin /var/jb/usr/sbin \
@@ -157,6 +161,8 @@ for marker in .procursus_strapped .installed_dopamine; do
 done
 
 # ═══════════ 5/7 INSTALL SILEO ═══════════════════════════════
+TROLLSTORE_READY=0
+if [ "$ALLOW_INSECURE_PACKAGES" = "1" ]; then
 log "[5/8] Installing Sileo..."
 SILEO_DEB_PATH="/private/preboot/$BOOT_HASH/org.coolstar.sileo_2.5.1_iphoneos-arm64.deb"
 
@@ -171,10 +177,16 @@ else
     fi
 fi
 
+else
+    log "[5/8] Skipping Sileo: VPHONE_ALLOW_INSECURE_PACKAGES is not enabled"
+fi
+
 # ═══════════ 5b/8 INSTALL EXTRA DEBS ═════════════════════════
 log "[5b/8] Installing extra debs..."
 DEBS_DIR="/private/preboot/$BOOT_HASH/debs"
-if [ -d "$DEBS_DIR" ]; then
+if [ "$ALLOW_INSECURE_PACKAGES" != "1" ]; then
+    log "  Skipping extra debs: VPHONE_ALLOW_INSECURE_PACKAGES is not enabled"
+elif [ -d "$DEBS_DIR" ]; then
     to_install=()
     for deb in "$DEBS_DIR"/*.deb; do
         [ -f "$deb" ] || continue
@@ -213,6 +225,9 @@ uicache -a 2>/dev/null || true
 log "  uicache refreshed"
 
 # ═══════════ 6/7 APT SETUP ══════════════════════════════════
+if [ "$ALLOW_INSECURE_PACKAGES" != "1" ]; then
+    log "[6/8] Skipping unsigned apt setup: VPHONE_ALLOW_INSECURE_PACKAGES is not enabled"
+else
 log "[6/8] Running apt setup..."
 
 # Determine apt sources directory
@@ -253,7 +268,6 @@ log "  apt upgrade done"
 
 # ═══════════ 7/7 INSTALL TROLLSTORE LITE ═════════════════════
 log "[7/8] Installing TrollStore Lite..."
-TROLLSTORE_READY=0
 if dpkg -s com.opa334.trollstorelite >/dev/null 2>&1; then
     log "  TrollStore Lite already installed"
     TROLLSTORE_READY=1
@@ -271,6 +285,7 @@ else
             log "  WARNING: TrollStore Lite install completed without registering package"
         fi
     fi
+fi
 fi
 
 uicache -a 2>/dev/null || true
@@ -305,7 +320,7 @@ for profile in /var/root/.bashrc /var/root/.bash_profile; do
 done
 
 # ═══════════ DONE ════════════════════════════════════════════
-if [ "$TROLLSTORE_READY" = "1" ]; then
+if [ "$ALLOW_INSECURE_PACKAGES" != "1" ] || [ "$TROLLSTORE_READY" = "1" ]; then
     : > "$DONE_MARKER"
     log "=== vphone_jb_setup.sh complete ==="
 else

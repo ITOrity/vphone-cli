@@ -220,6 +220,10 @@ ipython_config.py
 TODO.md
 .superpowers/
 
+# Local signing credentials (always supplied via VPHONE_SIGNCERT)
+*.p12
+.vphone-secrets/
+
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
 __pypackages__/
 

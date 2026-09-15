@@ -34,6 +34,25 @@ struct ResourcesTests {
         #expect(r.toolsBinDir.path == r.base.appendingPathComponent(".tools/bin").path)
     }
 
+    @Test func externalSigningCertificateRequiresOwnerOnlyFile() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let cert = root.appendingPathComponent("signing.p12")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("fixture".utf8).write(to: cert)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: cert.path)
+        let resolved = VPhoneResources.externalSigningCertificateURL(
+            environment: ["VPHONE_SIGNCERT": cert.path]
+        )
+        #expect(resolved?.path == cert.path)
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: cert.path)
+        #expect(VPhoneResources.externalSigningCertificateURL(
+            environment: ["VPHONE_SIGNCERT": cert.path]
+        ) == nil)
+    }
+
     /// These all shell out; a missing interpreter must return false, not throw.
     @Test func venvProbesAreTotalForAMissingInterpreter() {
         let r = VPhoneResources(base: URL(fileURLWithPath: "/x"))

@@ -119,8 +119,7 @@ class VPhoneControl {
     }
 
     private static func signCertURL() -> URL? {
-        let signcert = VPhoneResources.resolve().signcert
-        return FileManager.default.fileExists(atPath: signcert.path) ? signcert : nil
+        VPhoneResources.resolve().signcert
     }
 
     // MARK: - Guest Binary Hash

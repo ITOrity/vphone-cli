@@ -25,6 +25,7 @@ set -euo pipefail
 
 VM_DIR="${1:-.}"
 SCRIPT_DIR="${0:a:h}"
+SIGNCERT="$("$SCRIPT_DIR/require_signing_cert.sh")"
 
 # Resolve absolute paths
 VM_DIR="$(cd "$VM_DIR" && pwd)"
@@ -65,14 +66,14 @@ check_prerequisites() {
 
 ldid_sign() {
     local file="$1" bundle_id="${2:-}"
-    local args=(-S -M "-K$VM_DIR/$CFW_INPUT/signcert.p12")
+    local args=(-S -M "-K$SIGNCERT")
     [[ -n "$bundle_id" ]] && args+=("-I$bundle_id")
     ldid "${args[@]}" "$file"
 }
 
 ldid_sign_ent() {
     local file="$1" entitlements_plist="$2" bundle_id="${3:-}"
-    local args=("-S$entitlements_plist" "-K$VM_DIR/$CFW_INPUT/signcert.p12")
+    local args=("-S$entitlements_plist" "-K$SIGNCERT")
     [[ -n "$bundle_id" ]] && args+=("-I$bundle_id")
     ldid "${args[@]}" "$file"
 }
@@ -107,13 +108,17 @@ find_restore_dir() {
 
 # ── Setup input resources ──────────────────────────────────────
 setup_cfw_input() {
-    [[ -d "$VM_DIR/$CFW_INPUT" ]] && return
+    if [[ -d "$VM_DIR/$CFW_INPUT" ]]; then
+        rm -f "$VM_DIR/$CFW_INPUT/signcert.p12"
+        return
+    fi
     local archive
     for search_dir in "$SCRIPT_DIR/resources" "$SCRIPT_DIR" "$VM_DIR"; do
         archive="$search_dir/$CFW_ARCHIVE"
         if [[ -f "$archive" ]]; then
             echo "  Extracting $CFW_ARCHIVE..."
             tar --zstd -xf "$archive" -C "$VM_DIR"
+            rm -f "$VM_DIR/$CFW_INPUT/signcert.p12"
             return
         fi
     done

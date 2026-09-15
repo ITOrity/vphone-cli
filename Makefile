@@ -7,7 +7,7 @@ VM_DIR      ?= vm
 # Absolute VM path: handles both relative (default `vm`) and absolute
 # (e.g. external SSD) VM_DIR values. `abspath` leaves absolute paths intact
 # and joins relative ones against CURDIR — use this for the VM directory arg.
-VM_DIR_ABS  := $(abspath $(VM_DIR))
+VM_DIR_ABS  := $(abspath $(value VM_DIR))
 # CPU cores, memory (MB), disk size (GB) — used only during vm_new.
 # NB: no inline comments on these `?=` lines — make would fold the trailing
 # whitespace into the value (e.g. CPU="8   ") and break numeric consumers.
@@ -42,6 +42,21 @@ SWIFT_SOURCES := $(shell find sources -name '*.swift')
 
 # ─── Environment — prefer project-local binaries ────────────────
 export PATH := $(CURDIR)/$(TOOLS_PREFIX)/bin:$(CURDIR)/$(VENV)/bin:$(CURDIR)/.build/release:$(PATH)
+# Export caller-provided values without re-expanding nested make syntax from
+# command-line/environment input. Recipes validate enums and pass them quoted.
+export SUDO_PASSWORD := $(value SUDO_PASSWORD)
+export INTERACTIVE := $(value INTERACTIVE)
+export NO_BINPACK := $(value NO_BINPACK)
+export NO_VPHONED := $(value NO_VPHONED)
+export SPOOF_BUILD := $(value SPOOF_BUILD)
+export VARIANT := $(value VARIANT)
+export JB := $(value JB)
+export DEV := $(value DEV)
+export EXP := $(value EXP)
+export LESS := $(value LESS)
+export SKIP_PROJECT_SETUP := $(value SKIP_PROJECT_SETUP)
+export FRIDA := $(value FRIDA)
+export VPHONE_SIGNCERT := $(value VPHONE_SIGNCERT)
 
 # ─── Default ──────────────────────────────────────────────────────
 .PHONY: help
@@ -147,28 +162,23 @@ help:
 
 setup_machine:
 	@if count=0; \
-	  [ -n "$(filter 1 true yes YES TRUE,$(JB))" ] && count=$$((count+1)); \
-	  [ -n "$(filter 1 true yes YES TRUE,$(DEV))" ] && count=$$((count+1)); \
-	  [ -n "$(filter 1 true yes YES TRUE,$(EXP))" ] && count=$$((count+1)); \
-	  [ -n "$(filter 1 true yes YES TRUE,$(LESS))" ] && count=$$((count+1)); \
+	  [ -n "$(filter 1 true yes YES TRUE,$(value JB))" ] && count=$$((count+1)); \
+	  [ -n "$(filter 1 true yes YES TRUE,$(value DEV))" ] && count=$$((count+1)); \
+	  [ -n "$(filter 1 true yes YES TRUE,$(value EXP))" ] && count=$$((count+1)); \
+	  [ -n "$(filter 1 true yes YES TRUE,$(value LESS))" ] && count=$$((count+1)); \
 	  [ $$count -gt 1 ]; then \
 		echo "Error: JB=1, DEV=1, EXP=1, and LESS=1 are mutually exclusive"; \
 		exit 1; \
 	fi
-	SUDO_PASSWORD="$(SUDO_PASSWORD)" \
-	INTERACTIVE="$(INTERACTIVE)" \
-	NO_BINPACK="$(NO_BINPACK)" \
-	NO_VPHONED="$(NO_VPHONED)" \
-	SPOOF_BUILD="$(SPOOF_BUILD)" \
-	zsh $(SCRIPTS)/setup_machine.sh \
-		$(if $(filter 1 true yes YES TRUE,$(JB)),--jb,) \
-		$(if $(filter 1 true yes YES TRUE,$(DEV)),--dev,) \
-		$(if $(filter 1 true yes YES TRUE,$(EXP)),--exp,) \
-		$(if $(filter 1 true yes YES TRUE,$(LESS)),--less,) \
-		$(if $(filter 1 true yes YES TRUE,$(SKIP_PROJECT_SETUP)),--skip-project-setup,)
+	zsh "$(SCRIPTS)/setup_machine.sh" \
+		$(if $(filter 1 true yes YES TRUE,$(value JB)),--jb,) \
+		$(if $(filter 1 true yes YES TRUE,$(value DEV)),--dev,) \
+		$(if $(filter 1 true yes YES TRUE,$(value EXP)),--exp,) \
+		$(if $(filter 1 true yes YES TRUE,$(value LESS)),--less,) \
+		$(if $(filter 1 true yes YES TRUE,$(value SKIP_PROJECT_SETUP)),--skip-project-setup,)
 
 setup_tools:
-	VARIANT=$(VARIANT) zsh $(SCRIPTS)/setup_tools.sh
+	zsh "$(SCRIPTS)/setup_tools.sh"
 
 # ═══════════════════════════════════════════════════════════════════
 # Clean — remove generated build/tooling files by default.
@@ -229,7 +239,6 @@ bundle: build $(INFO_PLIST)
 	@cp -f $(BINARY) $(BUNDLE_BIN)
 	@cp -f $(INFO_PLIST) $(BUNDLE)/Contents/Info.plist
 	@cp -f sources/AppIcon.icns $(BUNDLE)/Contents/Resources/AppIcon.icns
-	@cp -f $(SCRIPTS)/vphoned/signcert.p12 $(BUNDLE)/Contents/Resources/signcert.p12
 	@cp -f $$(command -v ldid) $(BUNDLE)/Contents/MacOS/ldid
 	@codesign --force --sign - $(BUNDLE)/Contents/MacOS/ldid
 	@codesign --force --sign - --entitlements $(ENTITLEMENTS) $(BUNDLE_BIN)
@@ -240,12 +249,13 @@ bundle: build $(INFO_PLIST)
 vphoned:
 	@command -v ldid >/dev/null 2>&1 \
 		|| (echo "Error: ldid not found. Run: brew install ldid-procursus" && exit 1)
+	@$(SCRIPTS)/require_signing_cert.sh >/dev/null
 	$(MAKE) -C $(SCRIPTS)/vphoned GIT_HASH=$(GIT_HASH)
 	@echo "=== Signing vphoned ==="
 	cp $(SCRIPTS)/vphoned/vphoned $(VM_DIR)/.vphoned.signed
 	ldid \
 		-S$(SCRIPTS)/vphoned/entitlements.plist \
-		-M "-K$(SCRIPTS)/vphoned/signcert.p12" \
+		-M "-K$${VPHONE_SIGNCERT}" \
 		$(VM_DIR)/.vphoned.signed
 	@echo "  signed → $(VM_DIR)/.vphoned.signed"
 
@@ -485,13 +495,15 @@ cfw_install_dev:
 	$(MAKE) cfw_install_host VARIANT=dev
 
 cfw_install_jb:
-	$(MAKE) cfw_install_host VARIANT=jb FRIDA="$(FRIDA)"
+	$(MAKE) cfw_install_host VARIANT=jb
 
 cfw_install_exp:
-	$(MAKE) cfw_install_host VARIANT=exp SPOOF_BUILD="$(SPOOF_BUILD)" FRIDA="$(FRIDA)"
+	$(MAKE) cfw_install_host VARIANT=exp
 
 # CFW install: place files via host mount + flip the boot snapshot offline.
 # VM must be off; re-execs under sudo.
 #   Options: VARIANT=regular|dev|jb|exp (default exp)  SPOOF_BUILD=<id> (exp)
 cfw_install_host:
-	$(if $(SPOOF_BUILD),SPOOF_BUILD="$(SPOOF_BUILD)") $(if $(filter 1 true yes YES TRUE,$(FRIDA)),VPHONE_FRIDA=1) zsh "$(CURDIR)/$(SCRIPTS)/cfw_install_host.sh" --variant $(if $(VARIANT),$(VARIANT),exp) "$(VM_DIR_ABS)"
+	@variant="$${VARIANT:-exp}"; \
+	case "$$variant" in regular|dev|jb|exp) ;; *) echo "Error: VARIANT must be regular, dev, jb, or exp" >&2; exit 1 ;; esac; \
+	zsh "$(CURDIR)/$(SCRIPTS)/cfw_install_host.sh" --variant "$$variant" "$(VM_DIR_ABS)"
